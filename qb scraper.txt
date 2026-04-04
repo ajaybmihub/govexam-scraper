@@ -1,0 +1,366 @@
+You're essentially building a **multi-source intelligent scraping agent** (not just a scraper). Treat this like a **search + decision + extraction pipeline**, similar to how a human hunts PDFs across the web.
+
+I’ll give you a **production-grade architecture + stack + strategies** so you can build this without getting blocked.
+
+---
+
+# 🧠 1. System Architecture (Agent-Based Scraper)
+
+Think in **modular agents**, not a single script.
+
+```
+User Input
+   ↓
+Search Agent (Google/Bing/DuckDuckGo)
+   ↓
+Link Filtering Agent (Find relevant pages)
+   ↓
+Crawler Agent (Visit pages, scroll, render JS)
+   ↓
+PDF Extraction Agent (Detect & download PDFs)
+   ↓
+Validation Agent (Check year + exam match)
+   ↓
+Storage Manager (Save in structured folders)
+```
+
+---
+
+# ⚙️ 2. Tech Stack (Battle-Tested)
+
+### 🧩 Core Backend
+
+* **Python 3.10+**
+* Async support → `asyncio`, `aiohttp`
+
+### 🔍 Search Layer
+
+* `serpapi` (Google search API – BEST)
+* `duckduckgo-search` (free fallback)
+* `googlesearch-python` (backup)
+
+### 🌐 Scraping / Crawling
+
+* `playwright` ⭐ (MANDATORY – handles JS, scrolling)
+* `beautifulsoup4` (HTML parsing)
+* `lxml` (fast parsing)
+
+### 📄 PDF Handling
+
+* `requests` / `aiohttp`
+* `PyMuPDF` or `pdfplumber` (optional validation)
+
+### 🧠 Smart Filtering (Optional but powerful)
+
+* `sentence-transformers` (semantic filtering)
+* `re` (regex for year detection)
+
+### 📁 Storage
+
+* Local FS (`os`, `pathlib`)
+* Optional: MongoDB (if scaling later)
+
+---
+
+# 🏗️ 3. Folder Structure (Production Ready)
+
+```
+exam_scraper/
+│
+├── agents/
+│   ├── search_agent.py
+│   ├── filter_agent.py
+│   ├── crawler_agent.py
+│   ├── pdf_agent.py
+│   ├── validator_agent.py
+│
+├── utils/
+│   ├── logger.py
+│   ├── file_manager.py
+│   ├── helpers.py
+│
+├── config/
+│   ├── settings.py
+│
+├── data/
+│   └── (downloaded PDFs)
+│
+├── main.py
+├── requirements.txt
+```
+
+---
+
+# 🔄 4. Pipeline Flow (Step-by-Step)
+
+## Step 1: Generate Search Queries
+
+```python
+queries = [
+    f"{exam_name} {year} question paper pdf",
+    f"{exam_name} {year} previous paper download",
+    f"{exam_name} {year} solved paper pdf"
+]
+```
+
+---
+
+## Step 2: Search Agent
+
+Use multiple sources to avoid blocking:
+
+```python
+from duckduckgo_search import DDGS
+
+def search_links(query):
+    results = []
+    with DDGS() as ddgs:
+        for r in ddgs.text(query, max_results=10):
+            results.append(r['href'])
+    return results
+```
+
+---
+
+## Step 3: Filter Relevant Links
+
+Filter by keywords:
+
+```python
+KEYWORDS = ["pdf", "question paper", "previous year"]
+
+def is_relevant(url):
+    return any(k in url.lower() for k in KEYWORDS)
+```
+
+---
+
+## Step 4: Crawler Agent (Playwright)
+
+Handles:
+
+* Dynamic pages
+* "Click here to download"
+* Infinite scroll
+
+```python
+from playwright.sync_api import sync_playwright
+
+def get_page_links(url):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(url, timeout=60000)
+
+        page.wait_for_timeout(3000)
+
+        links = page.eval_on_selector_all(
+            "a", "elements => elements.map(e => e.href)"
+        )
+
+        browser.close()
+        return links
+```
+
+---
+
+## Step 5: PDF Extraction
+
+```python
+def extract_pdf_links(links):
+    return [link for link in links if link.endswith(".pdf")]
+```
+
+---
+
+## Step 6: Validation Agent (Important)
+
+Avoid wrong downloads:
+
+```python
+import re
+
+def is_valid_pdf(url, exam_name, year):
+    return (
+        exam_name.lower() in url.lower()
+        and str(year) in url
+    )
+```
+
+---
+
+## Step 7: Download + Store
+
+```python
+import os
+import requests
+
+def download_pdf(url, exam, year):
+    folder = f"data/{exam}/{year}"
+    os.makedirs(folder, exist_ok=True)
+
+    file_name = url.split("/")[-1]
+    path = os.path.join(folder, file_name)
+
+    r = requests.get(url)
+    with open(path, "wb") as f:
+        f.write(r.content)
+```
+
+---
+
+## 🔁 8. Main Orchestrator
+
+```python
+for year in range(start_year, end_year + 1):
+    queries = generate_queries(exam, year)
+
+    for query in queries:
+        links = search_links(query)
+
+        for link in links:
+            if not is_relevant(link):
+                continue
+
+            page_links = get_page_links(link)
+            pdfs = extract_pdf_links(page_links)
+
+            for pdf in pdfs:
+                if is_valid_pdf(pdf, exam, year):
+                    download_pdf(pdf, exam, year)
+```
+
+---
+
+# 🚧 5. Real-World Blockers + Solutions
+
+## ❌ Blocker 1: CAPTCHA / Google blocking
+
+### ✅ Solution:
+
+* Use `serpapi` (paid but best)
+* Rotate user agents
+* Use proxies (`scraperapi`, `brightdata`)
+
+---
+
+## ❌ Blocker 2: JS-heavy sites
+
+### ✅ Solution:
+
+* Playwright (already solving it)
+
+---
+
+## ❌ Blocker 3: "Click here" buttons
+
+### ✅ Solution:
+
+```python
+page.click("text=Download")
+```
+
+---
+
+## ❌ Blocker 4: Wrong PDFs
+
+### ✅ Solution:
+
+* Validate using:
+
+  * URL
+  * Filename
+  * PDF content (optional)
+
+---
+
+## ❌ Blocker 5: Rate limiting
+
+### ✅ Solution:
+
+```python
+import time
+time.sleep(2)
+```
+
+---
+
+# 🧠 6. Advanced Upgrade (Highly Recommended)
+
+## 🔥 Add AI Filtering (Your strength area)
+
+Use embeddings:
+
+```python
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+def semantic_match(text, query):
+    score = model.similarity(text, query)
+    return score > 0.6
+```
+
+---
+
+## 🔥 Add Retry System
+
+```python
+for _ in range(3):
+    try:
+        download_pdf(...)
+        break
+    except:
+        continue
+```
+
+---
+
+## 🔥 Add Logging
+
+```python
+import logging
+logging.basicConfig(level=logging.INFO)
+```
+
+---
+
+# 🧩 7. Scaling Strategy (Future SaaS)
+
+* Store metadata in MongoDB
+* Build API using FastAPI
+* Add Streamlit dashboard
+* Schedule jobs (cron)
+
+---
+
+# 🏁 8. Final Strategy Summary
+
+### ✅ MUST HAVE
+
+* Playwright (core engine)
+* Multi-search sources
+* Validation logic
+* Structured storage
+
+### 🚀 DIFFERENTIATOR
+
+* AI filtering agent
+* Multi-agent pipeline
+* Retry + fault tolerance
+
+---
+
+# 💡 Pro Insight (Important)
+
+Don’t build this as a **script**.
+
+Build it as a **Reusable Scraping Engine**:
+
+* Plug any exam
+* Plug any year range
+* Runs autonomously
+
+---
+
+

@@ -1,0 +1,16 @@
+scrapling
+playwright
+duckduckgo-search
+requests
+httpx
+google-generativeai
+cloudscraper
+pdfplumber
+rich
+tenacity
+python-dotenv
+loguru
+fake-useragent
+tldextract
+typer
+brotli
