@@ -7,6 +7,8 @@ downloaded file before accepting it.
 
 from __future__ import annotations
 from pathlib import Path
+import json
+from datetime import datetime
 from loguru import logger
 from tenacity import (
     retry,
@@ -87,6 +89,22 @@ def download_pdf(url: str, save_path: Path, referer: str = "") -> bool:
 
     if validate_pdf(save_path):
         logger.success(f"Valid PDF saved → {save_path}")
+        
+        # --- Save Metadata Sidecar ---
+        metadata_path = save_path.with_suffix(".pdf.json")
+        try:
+            with open(metadata_path, "w") as f:
+                json.dump({
+                    "source_url": url,
+                    "referer": referer,
+                    "download_at": datetime.now().isoformat(),
+                    "file_size": save_path.stat().st_size,
+                    "verified": True  # <--- Added verified state
+                }, f, indent=2)
+            logger.debug(f"Metadata saved to {metadata_path.name}")
+        except Exception as e:
+            logger.error(f"Failed to save metadata sidecar: {e}")
+            
         return True
     else:
         logger.warning(f"Downloaded file is not a valid PDF — removing: {save_path.name}")

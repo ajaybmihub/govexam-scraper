@@ -1,5 +1,9 @@
 scrapling
 playwright
+patchright
+curl-cffi
+msgspec
+browserforge
 duckduckgo-search
 requests
 httpx
@@ -14,3 +18,5 @@ fake-useragent
 tldextract
 typer
 brotli
+lxml
+pandas

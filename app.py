@@ -342,7 +342,20 @@ def _get_downloaded_files() -> dict[str, dict[str, list[Path]]]:
                 continue
             pdfs = sorted(year_dir.glob("*.pdf"))
             if pdfs:
-                result[exam_dir.name][year_dir.name] = pdfs
+                # Store PDF paths along with their verification status
+                files_info = []
+                for p in pdfs:
+                    meta_p = p.with_suffix(".pdf.json")
+                    verified = False
+                    if meta_p.exists():
+                        try:
+                            import json
+                            with open(meta_p, "r") as f:
+                                meta = json.load(f)
+                                verified = meta.get("verified", False)
+                        except: pass
+                    files_info.append({"path": p, "verified": verified})
+                result[exam_dir.name][year_dir.name] = files_info
     return result
 
 
@@ -419,7 +432,7 @@ with st.sidebar:
             import json
             export_data = {
                 "timestamp": datetime.now().isoformat(),
-                "exams": {k: [str(p.name) for year_v in v.values() for p in year_v] for k, v in dl_files.items()}
+                "exams": {k: [str(p["path"].name) for year_v in v.values() for p in year_v] for k, v in dl_files.items()}
             }
             st.download_button(
                 "Download Inventory (JSON)",
@@ -453,18 +466,24 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Top metrics row
+dl_snapshot = _get_downloaded_files()
 total_files = sum(
     len(files)
-    for exam_data in _get_downloaded_files().values()
-    for files in exam_data.values()
+    for exam_v in dl_snapshot.values()
+    for files in exam_v.values()
 )
-total_exams = len(_get_downloaded_files())
+total_verified = sum(
+    1 for exam_v in dl_snapshot.values()
+    for files in exam_v.values()
+    for f in files if f["verified"]
+)
+total_exams = len(dl_snapshot)
 
 mc1, mc2, mc3, mc4 = st.columns(4)
-mc1.metric("📚 PDFs Downloaded", total_files)
-mc2.metric("🎯 Exams Scraped", total_exams)
-mc3.metric("🧠 LLM Scorer", "ON" if use_llm else "OFF")
-mc4.metric("💾 Storage", f"{sum(p.stat().st_size for exam_data in _get_downloaded_files().values() for files in exam_data.values() for p in files) / 1024**2:.1f} MB" if total_files else "0 MB")
+mc1.metric("📚 Total PDFs", total_files)
+mc2.metric("✅ Verified Papers", total_verified)
+mc3.metric("🎯 Exams Scraped", total_exams)
+mc4.metric("💾 Storage", f"{sum(f['path'].stat().st_size for exam_v in dl_snapshot.values() for files in exam_v.values() for f in files) / 1024**2:.1f} MB" if total_files else "0 MB")
 
 st.markdown("---")
 
@@ -745,14 +764,17 @@ else:
             for year_folder, files in sorted(years_data.items(), reverse=True):
                 st.markdown(f"**{year_folder}**")
                 cols = st.columns(min(len(files), 3))
-                for idx, fpath in enumerate(files):
+                for idx, file_info in enumerate(files):
+                    fpath = file_info["path"]
+                    is_ver = file_info["verified"]
                     with cols[idx % 3]:
                         size_str = _human_size(fpath)
+                        verified_tag = '<span class="badge-ok" style="margin-left:5px; font-size:0.65rem">VERIFIED</span>' if is_ver else ""
                         st.markdown(
                             f"<div class='file-card'>"
                             f"<div class='file-icon'>📄</div>"
                             f"<div class='file-info'>"
-                            f"<div class='file-name'>{fpath.name}</div>"
+                            f"<div class='file-name'>{fpath.name} {verified_tag}</div>"
                             f"<div class='file-meta'>{size_str}</div>"
                             f"</div></div>",
                             unsafe_allow_html=True,
