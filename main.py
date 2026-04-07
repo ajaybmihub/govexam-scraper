@@ -58,30 +58,53 @@ console = Console()
 # ─── Robust Labelling and Suffix Extraction ──────────────────────────────────
 
 def _get_detailed_label(url: str, base_label: str) -> str:
-    """Extract details like Shift 1, Set A, etc. from the filename/URL."""
-    u_lower = url.lower()
+    """Extract details like Shift 1, Set A, Slot 1, Morning/Evening, Tier 1, etc. from the filename/URL."""
+    u_lower = url.lower().replace("%20", "-").replace("_", "-")
     
-    # Try to find Shift info
+    parts = []
+    
+    # 1. Shift
     m_shift = re.search(r"shift[-_\s]?(\d+)", u_lower)
-    if m_shift:
-        base_label = f"{base_label}_Shift{m_shift.group(1)}"
+    if m_shift: parts.append(f"Shift{m_shift.group(1)}")
         
-    # Try to find Set info
-    m_set = re.search(r"\bset[-_\s]?([a-d])\b", u_lower)
-    if m_set:
-        base_label = f"{base_label}_Set{m_set.group(1).upper()}"
+    # 2. Set
+    m_set = re.search(r"set[-_\s]?([a-d])\b", u_lower)
+    if m_set: parts.append(f"Set{m_set.group(1).upper()}")
         
-    # Try to find Session info
-    if "session" in u_lower:
-        m_sess = re.search(r"session[-_\s]?(\d+)", u_lower)
-        if m_sess:
-            base_label = f"{base_label}_Session{m_sess.group(1)}"
+    # 3. Session / Slot
+    m_sess = re.search(r"(?:session|slot)[-_\s]?(\d+)", u_lower)
+    if m_sess: parts.append(f"Slot{m_sess.group(1)}")
+
+    # 4. Phase / Tier
+    m_tier = re.search(r"(?:tier|phase|stage)[-_\s]?(\d+)", u_lower)
+    if m_tier: parts.append(f"Tier{m_tier.group(1)}")
+
+    # 5. Morning / Evening / Afternoon
+    if "morn" in u_lower:    parts.append("Morning")
+    if "even" in u_lower:    parts.append("Evening")
+    if "afternoon" in u_lower: parts.append("Afternoon")
+
+    # 6. Combined result
+    if parts:
+        # Join new details with the base label
+        return f"{base_label}_" + "_".join(parts)
+    
+    # Fallback: if no metadata found, try to extract a tiny slug from the filename
+    filename_part = url.split("/")[-1].split("?")[0].lower()
+    # Clean it up: remove the exam name and extension to avoid long names
+    slug = re.sub(r"(\.pdf|ibps|clerk|question|paper|year|previous|solved|20\d\d)", "", filename_part)
+    slug = re.sub(r"[-_\s]+", "-", slug).strip("-")
+    
+    if slug and len(slug) > 3:
+        # Only use the first 2 chunks of the slug if it's too long
+        short_slug = "_".join(slug.split("-")[:2]).upper()
+        return f"{base_label}_{short_slug}"
 
     return base_label
 
 
-def _assign_labels(pdf_urls: list[str], paper_labels: list[str]) -> list[tuple[str, str]]:
-    """Assign each PDF URL a primary label (Prelims/Mains) and a detailed suffix."""
+def _assign_labels(pdf_urls: list[str], paper_labels: list[str], target_year: int) -> list[tuple[str, str, int | str]]:
+    """Assign each PDF URL a detail label and its identified year."""
     assignments = []
     
     for url in pdf_urls:
@@ -95,7 +118,25 @@ def _assign_labels(pdf_urls: list[str], paper_labels: list[str]) -> list[tuple[s
                 break
         
         detailed = _get_detailed_label(url, primary)
-        assignments.append((url, detailed))
+        
+
+        # --- Improved Year Identification ---
+        # 1. Search in Filename specifically (most accurate)
+        filename_part = url.split("/")[-1].split("?")[0]
+        years_in_filename = re.findall(r"\b(20[123]\d)\b", filename_part)
+        
+        # 2. Search in the whole URL (path fallback)
+        years_in_path = re.findall(r"\b(20[123]\d)\b", u_lower)
+        
+        if years_in_filename:
+            year_found = int(years_in_filename[0])
+        elif years_in_path:
+            # If multiple in path, use the last one (it's often closer to the file)
+            year_found = int(years_in_path[-1])
+        else:
+            year_found = target_year if target_year > 0 else "common"
+
+        assignments.append((url, detailed, year_found))
         
     return assignments
 
@@ -105,32 +146,27 @@ def _assign_labels(pdf_urls: list[str], paper_labels: list[str]) -> list[tuple[s
 def _download_all_relevant(pdf_urls: list[str], exam: str, year: int,
                           paper_labels: list[str], referer: str,
                           session_history: set[str]) -> int:
-    """
-    Download a list of PDFs for a given exam+year.
-    Avoids duplicate URLs and uses unique paths for shifts/sets.
-    Returns count of new PDFs successfully downloaded.
-    """
-    if not pdf_urls:
-        return 0
+    """Download a list of PDFs, putting unknowns into 'common'."""
+    if not pdf_urls: return 0
         
     new_downloads = 0
-    assigned = _assign_labels(pdf_urls, paper_labels)
+    assigned = _assign_labels(pdf_urls, paper_labels, year)
     
-    for url, label in assigned:
-        if url in session_history:
-            continue
-            
+    for url, label, identified_year in assigned:
+        if url in session_history: continue
         session_history.add(url)
         
-        # Determine the next available unique file path (Safe handling for multiple shifts)
-        save_path = get_next_available_path(exam, year, label)
+        # Use the identified year (e.g. 2023 or 'common') instead of just the search year
+        save_path = get_next_available_path(exam, identified_year, label)
         
-        logger.info(f"    → [{label}] Downloading from {url[:80]}...")
+        # Update logs to reflect folder destination
+        dest = str(identified_year) if str(identified_year).isdigit() else "common"
+        logger.info(f"    → [{dest}/{label}] Downloading: {url[:60]}...")
+        
         if download_pdf(url, save_path, referer=referer):
             new_downloads += 1
-            logger.success(f"      ✓ Saved as {save_path.name}")
+            logger.success(f"      ✓ Saved to {dest}/ folder")
         
-        # Small delay between multiple files on the same host
         human_delay(0.5, 1.2)
         
     return new_downloads

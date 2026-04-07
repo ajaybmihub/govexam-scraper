@@ -48,11 +48,9 @@ _QP_POSITIVE_PATTERNS = [
     r"prelim",
     r"mains?[-_\s]?paper",
     r"memory[-_\s]?based",
-    r"solved[-_\s]?paper",
     r"exam[-_\s]?paper",
     r"practice[-_\s]?paper",
     r"sample[-_\s]?paper",
-    r"solved",
     r"mock[-_\s]?(?:online)?[-_\s]?paper",
     r"\bqp\b",
     r"shift[-_\s]?\d",
@@ -97,6 +95,9 @@ _QP_NEGATIVE_PATTERNS = [
     r"gk[-_]?digest",
     r"test[-_]?series",
     r"mock[-_]?test",     # Actual online mock tests, not PDFs
+    r"solution",
+    r"solved",
+    r"with[-_]?solution",
 ]
 
 _QP_POS_RE = [re.compile(p, re.I) for p in _QP_POSITIVE_PATTERNS]

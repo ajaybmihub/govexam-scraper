@@ -25,18 +25,21 @@ def make_filename(exam: str, year: int, label: str = "") -> str:
     return f"{safe_exam}_{year}{label}.pdf"
 
 
-def make_save_path(exam: str, year: int, label: str = "", index: int = 1) -> Path:
+def make_save_path(exam: str, year: int | str, label: str = "", index: int = 1) -> Path:
     """Return the full save path for a paper PDF."""
     if not label:
         label = f"Paper{index}"
     elif index > 1:
         label = f"{label}_{index}"
     
-    filename = make_filename(exam, year, label)
-    return BASE_DOWNLOAD_DIR / safe_name(exam) / str(year) / filename
+    filename = make_filename(exam, int(year) if str(year).isdigit() else 0, label)
+    
+    # If year is 0 or "common", use a "common" subfolder
+    year_folder = str(year) if str(year).isdigit() and int(year) > 0 else "common"
+    return BASE_DOWNLOAD_DIR / safe_name(exam) / year_folder / filename
 
 
-def get_next_available_path(exam: str, year: int, label: str = "") -> Path:
+def get_next_available_path(exam: str, year: int | str, label: str = "") -> Path:
     """
     Find the next available path for a given exam, year, and label.
     Increments index (e.g. Prelims, Prelims_2, Prelims_3) until available.
