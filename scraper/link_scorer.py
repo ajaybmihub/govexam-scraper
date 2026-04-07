@@ -19,6 +19,8 @@ from config import (
     GEMINI_MODEL,
     LLM_MAX_TOKENS,
     USE_LLM_SCORER,
+    BROAD_SEARCH_MODE,
+    MAX_BROAD_CANDIDATES,
     MAX_CANDIDATES_TO_SCORE,
     MAX_CANDIDATES_TO_TRY,
 )
@@ -168,10 +170,24 @@ ordered by confidence. No explanation, no markdown fencing. Example:
 def score_and_rank(exam: str, year: int, candidates: list[dict]) -> list[str]:
     """
     Rank candidate search results and return the top URLs to try.
-    Uses LLM if USE_LLM_SCORER=True and key is available, otherwise heuristic.
+    If BROAD_SEARCH_MODE is True, returns all unique candidates (limit MAX_BROAD_CANDIDATES).
+    Otherwise, uses LLM if USE_LLM_SCORER=True and key is available, else heuristic.
     """
     if not candidates:
         return []
+
+    if BROAD_SEARCH_MODE:
+        # Just return the URLs in the order they were found
+        logger.info(f"Broad Discovery Mode: Bypassing score/rank for {len(candidates)} search hits")
+        # Ensure we return a list of unique strings
+        urls = []
+        seen = set()
+        for c in candidates:
+            u = c.get("href", "")
+            if u and u not in seen:
+                urls.append(u)
+                seen.add(u)
+        return urls[:MAX_BROAD_CANDIDATES]
 
     if USE_LLM_SCORER:
         return _rank_with_llm(exam, year, candidates)

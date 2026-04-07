@@ -33,6 +33,8 @@ MAX_DELAY_SEC = 4.0
 GEMINI_MODEL = "gemini-2.5-flash-lite"  # Standard stable model
 LLM_MAX_TOKENS = 600
 USE_LLM_SCORER = True           # Set False to skip LLM scoring (faster, less accurate)
+BROAD_SEARCH_MODE = False        # If True, skips scoring and visits ALL search results
+MAX_BROAD_CANDIDATES = 25       # Max pages to visit in Broad Discovery mode
 
 # ─── Trusted Domains (boosted in scoring) ────────────────────────────────────
 TRUSTED_DOMAINS = [
@@ -182,12 +184,73 @@ EXAM_SOURCE_MAP = {
     },
     "TNPSC Group 2": {
         "full_name": "TNPSC Group 2",
-        "official": "tnpsc.gov.in",
         "tier0": ["testbook.com", "adda247.com", "cracku.in", "careerpower.in"],
-        "tier2": ["affairscloud.com", "examrace.com"],
         "search_query": 'TNPSC Group 2 {year} question paper PDF Tamil Nadu',
         "papers": ["Paper1", "Paper2"],
     },
+    # ─── JUDICIARY & LEGAL ────────────────────────────────────────────────
+    "State Judicial Services": {"full_name": "Civil Judge Recruitment", "search_query": "{exam} {year} question paper PDF solved"},
+    "District Judge Recruitment": {"full_name": "District Judge Exam", "search_query": "{exam} {year} question paper PDF"},
+    "High Court Clerk": {"full_name": "High Court Clerk Junior Assistant", "search_query": "{exam} {year} question paper PDF"},
+    "Lower Judiciary": {"full_name": "Judicial Magistrate", "search_query": "{exam} {year} question paper PDF"},
+    "Supreme Court Junior Assistant": {"full_name": "Supreme Court Junior Assistant Recruitment", "search_query": "{exam} {year} question paper PDF"},
+    
+    # ─── PSU & TECHNICAL ──────────────────────────────────────────────────
+    "ONGC Graduate Trainee": {"full_name": "ONGC GATE Recruitment", "search_query": "{exam} {year} question paper PDF"},
+    "IOCL Recruitment": {"full_name": "IOCL Executive Technical", "search_query": "{exam} {year} question paper PDF"},
+    "BHEL Recruitment": {"full_name": "BHEL Executive Technician", "search_query": "{exam} {year} question paper PDF"},
+    "SAIL Recruitment": {"search_query": "{exam} {year} question paper PDF"},
+    "NTPC Executive Trainee": {"search_query": "{exam} {year} question paper PDF"},
+    "BEL Recruitment": {"search_query": "{exam} {year} question paper PDF"},
+    "DRDO Scientist": {"full_name": "DRDO Scientist B Technician", "search_query": "{exam} {year} question paper PDF"},
+    "ISRO Scientist": {"full_name": "ISRO Technical Assistant Scientist", "search_query": "{exam} {year} question paper PDF"},
+    "HAL Recruitment": {"search_query": "{exam} {year} question paper PDF"},
+    "Coal India Recruitment": {"search_query": "{exam} {year} question paper PDF"},
+    "Power Grid Recruitment": {"search_query": "{exam} {year} question paper PDF"},
+    "NPCIL Recruitment": {"search_query": "{exam} {year} question paper PDF"},
+    "GAIL Executive Trainee": {"search_query": "{exam} {year} question paper PDF"},
+    "BEML Recruitment": {"search_query": "{exam} {year} question paper PDF"},
+    
+    # ─── STATE SERVICES (General) ─────────────────────────────────────────
+    "State TET": {"full_name": "Teacher Eligibility Test", "search_query": "{exam} {year} previous year question paper PDF"},
+    "State Medical Officer": {"search_query": "{exam} {year} question paper PDF"},
+    "Pharmacist Recruitment": {"search_query": "{exam} {year} question paper PDF"},
+    "CPWD JE AE": {"search_query": "{exam} {year} question paper PDF"},
+    "Cantonment Board": {"search_query": "{exam} {year} question paper PDF"},
+    "Apprenticeship": {"search_query": "{exam} {year} apprenticeship exam paper PDF"},
+    "Municipal Corporation": {"search_query": "{exam} {year} recruitment paper PDF"},
+    "State Cooperative Bank": {"search_query": "{exam} {year} question paper clerk officer PDF"},
+    "State Lecturer": {"full_name": "Assistant Professor Recruitment", "search_query": "{exam} {year} question paper PDF"},
+    "State Forest Guard": {"full_name": "Forest Ranger Recruitment", "search_query": "{exam} {year} question paper PDF"},
+    
+    # ─── STATE SPECIFIC PSCs ──────────────────────────────────────────────
+    "Arunachal Pradesh PSC": {"search_query": "APPSC {year} question paper PDF Arunachal Pradesh"},
+    "Assam PSC": {"search_query": "APSC {year} question paper PDF Assam"},
+    "Bihar PSC": {"search_query": "BPSC {year} question paper PDF Bihar"},
+    "Chhattisgarh PSC": {"search_query": "CGPSC {year} question paper PDF Chhattisgarh"},
+    "Goa PSC": {"search_query": "GPSC {year} question paper PDF Goa"},
+    "Gujarat PSC": {"search_query": "GPSC {year} question paper PDF Gujarat"},
+    "Haryana PSC": {"search_query": "HPSC {year} question paper PDF Haryana"},
+    "Himachal Pradesh PSC": {"search_query": "HPPSC {year} question paper PDF Himachal"},
+    "Jharkhand PSC": {"search_query": "JPSC {year} question paper PDF Jharkhand"},
+    "Karnataka PSC": {"search_query": "KPSC {year} question paper PDF Karnataka"},
+    "Kerala PSC": {"search_query": "KPSC {year} question paper PDF Kerala"},
+    "Madhya Pradesh PSC": {"search_query": "MPPSC {year} question paper PDF Madhya Pradesh"},
+    "Maharashtra PSC": {"search_query": "MPSC {year} question paper PDF Maharashtra"},
+    "Manipur PSC": {"search_query": "MPSC {year} question paper PDF Manipur"},
+    "Meghalaya PSC": {"search_query": "MPSC {year} question paper PDF Meghalaya"},
+    "Mizoram PSC": {"search_query": "MPSC {year} question paper PDF Mizoram"},
+    "Nagaland PSC": {"search_query": "NPSC {year} question paper PDF Nagaland"},
+    "Odisha PSC": {"search_query": "OPSC {year} question paper PDF Odisha"},
+    "Punjab PSC": {"search_query": "PPSC {year} question paper PDF Punjab"},
+    "Rajasthan PSC": {"search_query": "RPSC {year} question paper PDF Rajasthan"},
+    "Sikkim PSC": {"search_query": "SPSC {year} question paper PDF Sikkim"},
+    "Tamil Nadu PSC": {"search_query": "TNPSC {year} question paper PDF Tamil Nadu"},
+    "Telangana PSC": {"search_query": "TSPSC {year} question paper PDF Telangana"},
+    "Tripura PSC": {"search_query": "TPSC {year} question paper PDF Tripura"},
+    "Uttar Pradesh PSC": {"search_query": "UPPSC {year} question paper PDF Uttar Pradesh"},
+    "Uttarakhand PSC": {"search_query": "UKPSC {year} question paper PDF Uttarakhand"},
+    "West Bengal PSC": {"search_query": "WBPSC {year} question paper PDF West Bengal"},
 }
 
 # ─── Site Slug Registry ─────────────────────────────────────────────────────

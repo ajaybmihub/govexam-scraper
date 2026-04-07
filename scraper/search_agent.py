@@ -43,26 +43,23 @@ def build_queries(exam_name: str, year: int) -> list[str]:
         # 1. Direct filetype:pdf — most likely to find raw PDFs
         f'"{exam_name}" {year} question paper filetype:pdf',
 
-        # 2. Site-restricted to top exam portals
-        f'{exam_name} {year} previous year question paper pdf site:testbook.com OR site:adda247.com OR site:cracku.in OR site:prepp.in',
+        # 2. Key keywords for memory-based papers (very common in bank exams like IBPS)
+        f'{exam_name} {year} memory based question paper pdf',
 
-        # 3. Full name with year
-        f'"{full_name}" {year} question paper PDF download',
+        # 3. Generic previous year search
+        f'{exam_name} {year} previous year paper download',
 
-        # 4. PYQ / solved paper keyword
-        f'{exam_name} {year} PYQ solved paper pdf download',
+        # 4. Solved PYQ search
+        f'{exam_name} {year} solved PYQ paper pdf',
 
         # 5. Prelims + Mains variant
         f'{exam_name} {year} prelims mains question paper pdf',
 
-        # 6. Official site search
-        f'{exam_name} {year} question paper site:{official}' if official else f'{exam_name} {year} official question paper pdf',
+        # 6. Official / Board specific search
+        f'{exam_name} {year} paper site:{official}' if official else f'{exam_name} {year} official paper pdf',
 
-        # 7. "Previous year" keyword variant
-        f'{exam_name} previous year {year} paper pdf -youtube -instagram -facebook',
-
-        # 8. Broad download variant
-        f'download {short} {year} question paper pdf',
+        # 7. Common portal search (relax the OR count if needed)
+        f'{exam_name} {year} paper testbook adda247 cracku prepp oliveboard',
     ]
     return queries
 
@@ -145,6 +142,37 @@ def _search_google(query: str, max_results: int = 10) -> list[dict]:
         return []
 
 
+# ─── Browser Search (Last Resort - Playwright) ─────────────────────────
+
+async def _search_with_browser(query: str, engine: str = "google", max_results: int = 15) -> list[dict]:
+    """Launch a stealthy browser to get search results if simple requests are blocked."""
+    try:
+        from scrapling.fetchers import StealthyFetcher
+    except ImportError:
+        return []
+
+    url = f"https://www.{engine}.com/search?q={urllib.parse.quote_plus(query)}"
+    logger.debug(f"Browser Search ({engine}) → {url}")
+    
+    try:
+        # Use Scrapling's stealth fetch for the search results page itself
+        page = await StealthyFetcher.async_fetch(url, wait_until="domcontentloaded")
+        
+        # Capture all unique links that aren't engine-internal
+        raw_links = []
+        for a in page.css("a"):
+            href = a.attrib.get("href", "")
+            if href and "http" in href and engine not in href and "/search?" not in href:
+                raw_links.append(href)
+        
+        results = [{"title": "", "href": h, "body": ""} for h in list(dict.fromkeys(raw_links))[:max_results]]
+        logger.info(f"Browser Search ({engine}) → Found {len(results)} links")
+        return results
+    except Exception as exc:
+        logger.warning(f"Browser Search failed: {exc}")
+        return []
+
+
 # ─── Domain Filter ─────────────────────────────────────────────────────────────
 
 def _is_blocked(url: str) -> bool:
@@ -205,6 +233,32 @@ def search_for_papers(exam_name: str, year: int) -> list[dict]:
             if href and href not in seen_urls and not _is_blocked(href):
                 seen_urls.add(href)
                 all_results.append(r)
+
+    # ── Phase 4: Browser Search Fallback (Hardcore) ───────────────────────
+    if len(all_results) < 3:
+        logger.info(f"[{exam_name} {year}] 🚨 No URLs found via simple search — Launching stealth browser to search Google/Bing…")
+        import asyncio
+        for engine in ["google", "bing"]:
+            if len(all_results) >= 5: break
+            q = queries[0] # Use the highest quality query
+            try:
+                # Run the async browser search
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                        future = pool.submit(asyncio.run, _search_with_browser(q, engine=engine))
+                        browser_results = future.result(timeout=45)
+                else:
+                    browser_results = loop.run_until_complete(_search_with_browser(q, engine=engine))
+            except:
+                browser_results = asyncio.run(_search_with_browser(q, engine=engine))
+
+            for r in browser_results:
+                href = r.get("href", "")
+                if href and href not in seen_urls and not _is_blocked(href):
+                    seen_urls.add(href)
+                    all_results.append(r)
 
     logger.info(f"[{exam_name} {year}] Total search candidates: {len(all_results)}")
     return all_results[:MAX_SEARCH_RESULTS]

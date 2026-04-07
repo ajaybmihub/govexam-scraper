@@ -276,7 +276,7 @@ def _enqueue(q: queue.Queue, level: str, msg: str):
 # ═══════════════════════════════════════════════════════════
 # Scraper runner (runs in background thread)
 # ═══════════════════════════════════════════════════════════
-def _run_scraper(exam: str, years: list[int], skip_existing: bool, use_llm: bool, q: queue.Queue):
+def _run_scraper(exam: str, years: list[int], skip_existing: bool, use_llm: bool, broad_mode: bool, q: queue.Queue):
     """Runs the V4 search-first pipeline in a background thread."""
     # Windows fix: must set policy in EACH new thread using asyncio
     if sys.platform == 'win32':
@@ -287,6 +287,7 @@ def _run_scraper(exam: str, years: list[int], skip_existing: bool, use_llm: bool
 
     import config as cfg
     cfg.USE_LLM_SCORER = use_llm
+    cfg.BROAD_SEARCH_MODE = broad_mode
     
     # Import the main pipeline function
     from main import process_year
@@ -381,6 +382,8 @@ with st.sidebar:
     st.markdown("### 🛠️ Options")
     use_llm = st.toggle("🧠 LLM Ranking (Gemini)", value=bool(os.getenv("GEMINI_API_KEY")),
                         help="Uses Google Gemini API to intelligently rank candidate URLs. Requires GEMINI_API_KEY in .env")
+    broad_mode = st.toggle("🔥 Broad Discovery", value=False, 
+                        help="Skips AI/Heuristic ranking and visits almost ALL search results. Much more thorough but slower.")
     skip_existing = st.toggle("⏭ Skip Already Downloaded", value=True)
 
     st.markdown("---")
@@ -625,7 +628,7 @@ if start_btn and not st.session_state.running:
         years = list(range(int(start_year), int(end_year) + 1))
         t = threading.Thread(
             target=_run_scraper,
-            args=(exam_input.strip(), years, skip_existing, use_llm, q),
+            args=(exam_input.strip(), years, skip_existing, use_llm, broad_mode, q),
             daemon=True,
         )
         st.session_state._thread = t

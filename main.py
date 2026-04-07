@@ -195,9 +195,18 @@ def process_year(exam: str, year: int, skip_existing: bool) -> str:
     
     if candidates:
         ranked_pages = score_and_rank(exam, year, candidates)
-        # Visit top 8 result pages one by one (Human-like)
-        for i, page_url in enumerate(ranked_pages[:8], 1):
-            logger.info(f"  [{i}/8] Scraping: {page_url[:80]}")
+        
+        # Increase limit if in Broad Discovery mode
+        try:
+            from config import BROAD_SEARCH_MODE, MAX_BROAD_CANDIDATES, MAX_CANDIDATES_TO_TRY
+            limit = MAX_BROAD_CANDIDATES if BROAD_SEARCH_MODE else MAX_CANDIDATES_TO_TRY
+        except:
+            limit = 8 # Fallback
+            
+        logger.info(f"[{exam} {year}] Visiting top {limit} source pages…")
+
+        for i, page_url in enumerate(ranked_pages[:limit], 1):
+            logger.info(f"  [{i}/{limit}] Scraping: {page_url[:80]}")
             pdf_urls = extract_pdf_links(page_url, exam, year)
             if pdf_urls:
                 count = _download_all_relevant(pdf_urls, exam, year, paper_labels, page_url, session_history)
@@ -221,6 +230,9 @@ def scrape(
     no_llm: bool = typer.Option(
         False, "--no-llm", help="Disable LLM scoring (faster, heuristic only)"
     ),
+    broad: bool = typer.Option(
+        False, "--broad", help="Broad Discovery Mode: Skip scoring, visit up to 25 results"
+    ),
     skip_existing: bool = typer.Option(
         True, "--skip-existing/--no-skip", help="Skip years already downloaded"
     ),
@@ -230,6 +242,9 @@ def scrape(
 
     if no_llm:
         config.USE_LLM_SCORER = False
+    
+    if broad:
+        config.BROAD_SEARCH_MODE = True
 
     years = list(range(start_year, end_year + 1))
 

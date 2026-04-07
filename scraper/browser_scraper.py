@@ -42,6 +42,9 @@ _QP_POSITIVE_PATTERNS = [
     r"question[-_\s]?paper",
     r"prev(?:ious)?[-_\s]?year",
     r"\bpyq\b",
+    r"general[-_\s]?studies",
+    r"\bgs[-_\s]?paper\d?\b",
+    r"\bcsat\b",
     r"prelim",
     r"mains?[-_\s]?paper",
     r"memory[-_\s]?based",
@@ -123,6 +126,11 @@ def is_question_paper_pdf(url: str, exam: str = "", year: int = 0, context: str 
     combined = f"{url_lower} {ctx_lower} {page_lower}"
 
     # 1. Format check
+    # Avoid social sharing links (often contain "pdf" or "download" in the text)
+    SOCIAL_DOMAINS = ["whatsapp.com", "facebook.com", "twitter.com", "telegram.me", "plus.google.com", "linkedin.com", "pinterest.com"]
+    if any(sd in url_lower for sd in SOCIAL_DOMAINS):
+        return False
+
     # Relaxed: Allow non-pdf extensions if the domain is trusted OR context is strong
     is_pdf_ext = url_no_qs.endswith(".pdf") or "drive.google.com/uc" in url_lower
     
@@ -139,26 +147,25 @@ def is_question_paper_pdf(url: str, exam: str = "", year: int = 0, context: str 
     if any(neg.search(combined) for neg in _QP_NEG_RE):
         return False
 
-    # 3. STRICT YEAR CHECK
+    # 3. YEAR CHECK
     if year:
         target_year_str = str(year)
-        # Find all 4-digit years in combined context
+        # Find all 4-digit years in combined context (URL + link text + page title)
         years_found = _extract_years(combined)
         
-        # If any WRONG 4-digit year is found, reject immediately
-        if any(y != target_year_str for y in years_found):
-            return False
-            
-        # Target year must be present somewhere in the combined context
-        # (Could be in URL, link text, or parent page URL)
+        # If the target year is found, we proceed! 
+        # (We no longer reject if OTHER years are also mentioned on the same page, 
+        # as these "Mega Pages" list all years together.)
         has_target_year = target_year_str in combined
         
         # Heuristic: If target year is 2023, also look for " 23 " or "-23" 
         short_year = target_year_str[2:]
         if not has_target_year:
-            # Check for short year boundaries to avoid false positives like "shift-3" or "part-2"
             if re.search(rf"[^0-9]{short_year}[^0-9]", combined):
                 has_target_year = True
+        
+        if not has_target_year:
+            return False
     else:
         has_target_year = True # Ignore year
 
@@ -318,6 +325,19 @@ async def _scrapling_fetch(url: str, exam: str, year: int) -> list[str]:
                 h = urljoin(url, href.strip())
                 # Accumulate text for the same href
                 text = a.text.strip() if hasattr(a, 'text') else ""
+                
+                # SENSITIVE CONTEXT GRAB:
+                # If text is generic (like "Download" or "Click Here"), 
+                # grab text from the parent (the table cell or row)
+                if len(text) < 15 or any(kw in text.lower() for kw in ["download", "click", "here", "pdf"]):
+                    try:
+                        # Grab text from parent, grandparent, or preceding header
+                        # This captures year headers like "IBPS Clerk 2020" from nearby <td>s or <h2>s
+                        parent_text = a.parent.text if a.parent else ""
+                        text = f"{text} {parent_text}"[:300]
+                    except:
+                        pass
+                
                 found_with_text[h] = found_with_text.get(h, "") + " " + text
     except Exception:
         pass
